@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, Plus } from 'lucide-react';
+import { ChevronRight, Download, Plus } from 'lucide-react';
 import { useData, useToday } from '../../app/DataProvider';
 import { useExpenseActions } from '../../app/AddExpenseProvider';
 import { DateRangeFilter } from '../../components/DateRangeFilter';
@@ -33,6 +33,14 @@ export function TransactionsPage() {
   const [custom, setCustom] = useState<DateRange>(weekFromUrl ? { from: weekFromUrl, to: weekEndOf(weekFromUrl) } : {});
   const [sort, setSort] = useState<SortKey>('date-desc');
   const [limit, setLimit] = useState(PAGE);
+  // Only entries here override the default; anything absent falls back to isWeekOpenByDefault.
+  const [expandedOverride, setExpandedOverride] = useState<Record<string, boolean>>({});
+
+  const currentWeek = weekStartOf(today);
+  // The current week opens by default; a week reached via "View all" from the Overview does too.
+  const isWeekOpenByDefault = (week: string) => week === currentWeek || week === weekFromUrl;
+  const isWeekOpen = (week: string) => expandedOverride[week] ?? isWeekOpenByDefault(week);
+  const toggleWeek = (week: string) => setExpandedOverride((prev) => ({ ...prev, [week]: !isWeekOpen(week) }));
 
   const range = resolveRange(preset, today, custom);
   const merchants = useMemo(() => buildMerchants(data.expenses).sort((a, b) => a.name.localeCompare(b.name)), [data.expenses]);
@@ -141,15 +149,40 @@ export function TransactionsPage() {
               Try a different search or widen the date range.
             </EmptyState>
           ) : groups ? (
-            groups.map(([week, rows]) => (
-              <section key={week} className="group" aria-label={formatWeekRange(week, yearOf(today))}>
-                <h2 className="group__head">
-                  <span>{formatWeekRange(week, yearOf(today))}</span>
-                  <span className="num">{formatCents(weekTotals.get(week) ?? 0)}</span>
-                </h2>
-                <ul className="txlist">{rows.map(renderRow)}</ul>
-              </section>
-            ))
+            <>
+              {groups.length > 1 && (
+                <div className="row row--end">
+                  <button type="button" className="link-btn" onClick={() => setExpandedOverride(Object.fromEntries(groups.map(([w]) => [w, true])))}>
+                    Expand all
+                  </button>
+                  <button type="button" className="link-btn" onClick={() => setExpandedOverride(Object.fromEntries(groups.map(([w]) => [w, false])))}>
+                    Collapse all
+                  </button>
+                </div>
+              )}
+              {groups.map(([week, rows]) => {
+                const open = isWeekOpen(week);
+                const listId = `group-${week}`;
+                return (
+                  <section key={week} className="group">
+                    <h2 className="group__head">
+                      <button type="button" className="group__toggle" aria-expanded={open} aria-controls={listId} onClick={() => toggleWeek(week)}>
+                        <span className="group__left">
+                          <ChevronRight size={16} aria-hidden className={`group__chev${open ? ' is-open' : ''}`} />
+                          <span>{formatWeekRange(week, yearOf(today))}</span>
+                          {week === currentWeek && <span className="tag">Current</span>}
+                          <span className="dim group__count">
+                            {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}
+                          </span>
+                        </span>
+                        <span className="num">{formatCents(weekTotals.get(week) ?? 0)}</span>
+                      </button>
+                    </h2>
+                    {open && <ul className="txlist" id={listId}>{rows.map(renderRow)}</ul>}
+                  </section>
+                );
+              })}
+            </>
           ) : (
             <ul className="txlist">{visible.map(renderRow)}</ul>
           )}
