@@ -1,0 +1,73 @@
+/* ---------- Transactions ---------- */
+.txlist { border-top: 1px solid var(--line); }
+.tx { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto auto; align-items: center; gap: var(--s2) var(--s3); padding: 12px 0; border-bottom: 1px solid var(--line); }
+.tx__date { display: flex; flex-direction: column; font-size: 0.8125rem; color: var(--ink-2); line-height: 1.25; }
+.tx__dow { font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.6875rem; color: var(--ink); }
+.tx__main { display: flex; flex-direction: column; min-width: 0; }
+.tx__merchant { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx__meta { font-size: 0.8125rem; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx__amount { font-weight: 700; font-size: 1.0625rem; text-align: right; }
+.tx__amount.is-credit { color: var(--pos); }
+.tx__actions { display: flex; }
+@media (max-width: 519px) {
+  .tx { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'main amount' 'date actions'; row-gap: 2px; padding: 12px 0 6px; }
+  .tx__main { grid-area: main; } .tx__amount { grid-area: amount; } .tx__actions { grid-area: actions; justify-self: end; margin-top: -4px; }
+  .tx__date { grid-area: date; flex-direction: row; gap: var(--s2); align-items: baseline; }
+}
+.group { display: flex; flex-direction: column; gap: 0; }
+.group + .group { margin-top: var(--s3); }
+.group__head { display: flex; justify-content: space-between; gap: var(--s3); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; padding: var(--s2) 0; border-top: 2px solid var(--line-strong); }
+.filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); align-items: end; }
+.field--search { grid-column: 1 / -1; }
+@media (min-width: 900px) { .filters { grid-template-columns: repeat(6, minmax(0, 1fr)); } .field--search { grid-column: span 2; } }
+.filters--insights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { .filters--insights { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.filters__range { align-self: center; grid-column: 1 / -1; }
+@media (min-width: 900px) { .filters__range { grid-column: auto; } }
+.totalbar { display: flex; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; padding: var(--s3) 0; border-top: 2px solid var(--line-strong); border-bottom: 1px solid var(--line); font-size: 0.9375rem; }
+.totalbar__sum strong { font-size: 1.25rem; margin-left: var(--s2); }
+
+/* ---------- Tables ---------- */
+.tablewrap { overflow-x: auto; }
+.table { font-size: 0.9375rem; }
+.table th, .table td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: baseline; white-space: nowrap; }
+.table thead th { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid var(--line-strong); }
+.table tbody th { font-weight: 600; }
+.table .r { text-align: right; padding-right: 0; padding-left: 12px; }
+.table a { color: var(--ink); font-weight: 650; text-decoration-color: var(--line); }
+.table a:hover { color: var(--accent); }
+@media (max-width: 639px) {
+  /* stacked cards: each row becomes a labelled block */
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table, .table tbody, .table tr, .table th, .table td { display: block; width: 100%; }
+  .table tr { padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
+  .table tbody th { border: 0; padding: 0 0 var(--s2); white-space: normal; }
+  .table td { display: flex; justify-content: space-between; border: 0; padding: 2px 0; text-align: right; }
+  .table td::before { content: attr(data-label); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); align-self: center; }
+}
+
+/* ---------- Charts / stats ---------- */
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 2px solid var(--line-strong); }
+@media (min-width: 720px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.stat { padding: var(--s3) var(--s3) var(--s3) 0; display: flex; flex-direction: column-reverse; gap: 4px; border-bottom: 1px solid var(--line); }
+.stat dt { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); }
+.stat dd { font-size: clamp(1.4rem, 3.4vw, 2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; overflow-wrap: anywhere; }
+.chart svg { width: 100%; height: auto; }
+.chart__grid { stroke: var(--line); stroke-width: 1; }
+.chart__axis { fill: var(--ink-2); font-size: 11px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.chart__val { fill: var(--ink); font-size: 11px; font-weight: 650; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.chart__bar { fill: var(--ink); }
+.chart__bar--hl { fill: var(--accent); }
+.chart__marker { stroke: var(--accent); stroke-width: 3; }
+.chart__legend { display: flex; gap: var(--s3); align-items: center; font-size: 0.8125rem; color: var(--ink-2); flex-wrap: wrap; }
+.key { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.key--bar { width: 12px; height: 12px; background: var(--ink); }
+.key--marker { width: 16px; height: 3px; background: var(--accent); }
+.hbars { display: flex; flex-direction: column; gap: var(--s3); }
+.hbar__head { display: flex; justify-content: space-between; gap: var(--s3); font-size: 0.9375rem; font-weight: 600; margin-bottom: 4px; }
+.hbar__track { height: 10px; background: var(--sunken); }
+.hbar__fill { height: 100%; background: var(--ink); }
+.ranked { border-top: 1px solid var(--line); }
+.ranked li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: var(--s2); padding: 10px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.ranked__n { font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ranked__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
