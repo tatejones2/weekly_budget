@@ -25,9 +25,16 @@
 .group__toggle:hover { color: var(--accent); }
 .group__toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: -2px; }
 .group__left { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; min-width: 0; }
-.group__chev { flex: none; transition: transform 0.15s ease; }
+.group__chev { flex: none; transition: transform 0.2s ease; }
 .group__chev.is-open { transform: rotate(90deg); }
 .group__count { font-weight: 600; letter-spacing: 0; text-transform: none; }
+
+/* Smooth accordion via the animatable-grid-track trick: the row track morphs
+   between 0fr and 1fr, so height animates correctly even though the number of
+   rows (and therefore content height) varies per week. */
+.group__panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s ease; }
+.group__panel.is-open { grid-template-rows: 1fr; }
+.group__panel-inner { overflow: hidden; min-height: 0; }
 .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); align-items: end; }
 .field--search { grid-column: 1 / -1; }
 @media (min-width: 900px) { .filters { grid-template-columns: repeat(6, minmax(0, 1fr)); } .field--search { grid-column: span 2; } }

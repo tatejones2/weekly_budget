@@ -178,7 +178,12 @@ export function TransactionsPage() {
                         <span className="num">{formatCents(weekTotals.get(week) ?? 0)}</span>
                       </button>
                     </h2>
-                    {open && <ul className="txlist" id={listId}>{rows.map(renderRow)}</ul>}
+                    {/* Always rendered so the height can animate; `inert` pulls collapsed rows out of tab order and the a11y tree. */}
+                    <div className={`group__panel${open ? ' is-open' : ''}`}>
+                      <div className="group__panel-inner" inert={!open}>
+                        <ul className="txlist" id={listId}>{rows.map(renderRow)}</ul>
+                      </div>
+                    </div>
                   </section>
                 );
               })}
