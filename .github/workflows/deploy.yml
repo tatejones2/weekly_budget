@@ -53,3 +53,45 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy-droplet:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy over rsync
+        env:
+          SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          HOST: ${{ secrets.DROPLET_HOST }}
+          USER: ${{ secrets.DROPLET_USER }}
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+
+          # Pin the droplet's actual host key (public info, not a secret) instead of
+          # trusting it blind on first connect.
+          cat >> ~/.ssh/known_hosts <<'EOF'
+          64.225.24.213 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILlk3D7CJQUcDAP8Mb6lPujocWrZeGSneg9CZen7/WV+
+          64.225.24.213 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC8OQQpQc4dzEyQKJYIB3zE0wxpqvX9pTqIXPPZeYegDArKwHC5L4iaUmBFzGNRyV/EmHC/wZq6Empq3ClBovn1igEFbR04sKSCcrbmSYY5vvuxtwDui28oQrS8re4bl+qevwtblloZi1sHcmW6q61VGddpQBQ2OR/uv3fmetW/YdCaeHbugA63PLvtGeLcT85ffT4R+I9qUJPZPbDUVZGrVv9bNNKJbpmGjO5xWW6xPu2Eg0OKJXDVyCVxvsrPSGAZ7n/5Tku1yGllk8D/7IOHg2Y5uAw5yR0HZQdLrr0QbTJ2ARD2LE9FdDG/16TzPeyigVgx8dQaZ1Y4GS70tuvLdXAaYWtAetYSqHfiEh1ZEUFQkmS9womnpG8Tofcm2x1VWcP9zeL4fPmAe9Fir0GCesiF8JTqWa/QLva1ZsEz31/ZWemvdeXOBbXtIXN28LhVLjMZt3JHtMd23HikDugRYt3Uu8djgbE2Ok6N5CAED/zAbbHW3yskLexB0XyZTY8=
+          64.225.24.213 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBPWFj7eFDUluDsKdnJBr3f7KUrEgeIbEMwrcocbHBL8v79dZq16iQDwqQpwruGf/rCgyaEwMtJTm7VqgVfdeRBg=
+          EOF
+
+          # The deploy key is forced (via authorized_keys) into rrsync, restricted to
+          # a single directory on the droplet — it can only sync files there, nothing
+          # else. The destination must be given relative to that restricted root
+          # (rrsync chdir's into it server-side); "./" IS that root.
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" dist/ "$USER@$HOST:./"
