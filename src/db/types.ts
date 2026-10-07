@@ -46,9 +46,8 @@ export type BudgetSettings = {
   currency: 'USD';
 };
 
-/** Row stored in the `settings` table (single row, id = 'main'). */
+/** A user's settings row — one per account, scoped server-side by the session. */
 export type StoredSettings = BudgetSettings & {
-  id: 'main';
   lastBackupAt?: string;
   createdAt: string;
 };

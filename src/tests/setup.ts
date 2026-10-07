@@ -1,4 +1,3 @@
-import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
 
 // jsdom doesn't implement <dialog> modal methods.

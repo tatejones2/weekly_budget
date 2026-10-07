@@ -79,3 +79,10 @@
 .display { font-size: clamp(2.5rem, 9vw, 5.5rem); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95; }
 .display__accent { color: var(--accent); }
 .onboard__form { border-top: 4px solid var(--line-strong); padding-top: var(--s3); }
+
+/* ---------- Auth ---------- */
+.authpage { min-height: 100dvh; display: grid; grid-template-columns: 1fr; gap: var(--s5); max-width: calc(var(--maxw) + var(--gutter) * 2); margin: 0 auto; padding: var(--s5) var(--gutter) var(--s7); align-content: center; }
+@media (min-width: 900px) { .authpage { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s7); align-items: center; } }
+.authpage__intro { display: flex; flex-direction: column; gap: var(--s3); }
+.authpage__headline { font-size: clamp(2.25rem, 7vw, 4rem); }
+.authpage__card { border: 1.5px solid var(--line-strong); padding: var(--s4); background: var(--surface); max-width: 28rem; }

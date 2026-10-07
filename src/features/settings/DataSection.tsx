@@ -3,9 +3,10 @@ import { Download, Upload } from 'lucide-react';
 import { useData, useToday } from '../../app/DataProvider';
 import { useToast } from '../../app/Toasts';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { buildBackup, downloadFile, parseBackupText, restoreBackup, type BackupSummary } from '../../db/backup';
+import { buildBackup, parseBackupText, type BackupSummary } from '../../lib/backup';
+import { downloadFile } from '../../lib/download';
 import { expensesToCsv } from '../../db/csv';
-import { clearAllData, updateSettings } from '../../db/repo';
+import { clearAllData, restoreBackup, updateSettings } from '../../db/repo';
 import { formatDateLong, formatDateTimeLocal } from '../../lib/dates';
 import type { BackupFile } from '../../db/types';
 import { Section } from './SettingsPage';
@@ -37,9 +38,9 @@ export function DataSection() {
   }
 
   return (
-    <Section id="data" title="Your data" intro="Everything is stored in this browser on this device. Nothing is sent anywhere — there is no account and no cloud copy.">
+    <Section id="data" title="Your data" intro="Your transactions, budget and settings live in your account, so signing in from any device or browser shows the same data.">
       <div className="callout">
-        <strong>Back up regularly.</strong> Clearing site data, using a different browser or device, or a private window will show an empty app. Download a JSON backup to keep a full copy or move to another device.
+        <strong>Back up occasionally anyway.</strong> A JSON backup is a portable copy you control — useful before a big change, or if you ever want to move your data somewhere else.
       </div>
       <p className="hint">Last backup: {last ? formatDateTimeLocal(last, data.settings.timeZone) : 'never'} · {data.expenses.length} transactions</p>
 
@@ -60,7 +61,7 @@ export function DataSection() {
 
       <div className="danger-zone">
         <h3 className="h3">Danger zone</h3>
-        <p className="hint">Deletes all transactions, shortcuts, categories and settings from this browser and returns to setup.</p>
+        <p className="hint">Deletes all transactions, shortcuts, categories and settings from your account and returns to setup.</p>
         <button type="button" className="btn btn--danger-outline" onClick={() => setClearing(true)}>Clear all data…</button>
       </div>
 
@@ -106,7 +107,7 @@ export function DataSection() {
           setClearing(false);
         }}
       >
-        <p>This permanently erases all {data.expenses.length} transactions and every setting from this browser. There is no cloud copy to recover from.</p>
+        <p>This permanently erases all {data.expenses.length} transactions and every setting from your account. Download a backup first if you want a copy.</p>
       </ConfirmDialog>
     </Section>
   );

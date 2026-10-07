@@ -34,7 +34,7 @@ export function Onboarding() {
     try {
       await completeOnboarding({ baseAllowanceCents: baseParsed.cents, firstWeekStart: monday, openingCarryoverCents: openParsed.cents, timeZone });
     } catch {
-      setErrors({ form: 'Could not save to this browser’s storage. Check that private browsing or storage blocking is off, then try again.' });
+      setErrors({ form: 'Could not save your setup. Check your connection and try again.' });
       setBusy(false);
     }
   }
@@ -54,7 +54,7 @@ export function Onboarding() {
           <span className="display__accent">One week at a time.</span>
         </h1>
         <p className="lede">
-          A weekly allowance that carries forward. Underspend and next week is bigger; overspend and it’s smaller. Everything stays on this device — no account, no sign-up.
+          A weekly allowance that carries forward. Underspend and next week is bigger; overspend and it’s smaller. Just a couple of questions to get your account set up.
         </p>
       </div>
 

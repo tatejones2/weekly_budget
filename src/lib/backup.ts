@@ -1,4 +1,3 @@
-import { db as defaultDb, type WeeklyDB } from './db';
 import {
   BACKUP_APP_ID,
   BACKUP_SCHEMA_VERSION,
@@ -8,12 +7,20 @@ import {
   type Category,
   type Expense,
   type PurchaseTemplate,
-} from './types';
-import { isValidISODate, isValidTimeZone, weekdayIndex } from '../lib/dates';
-import { isValidCents } from '../lib/money';
+} from '../db/types';
+import { isValidISODate, isValidTimeZone, weekdayIndex } from './dates';
+import { isValidCents } from './money';
+
+/**
+ * Pure backup-file logic — no Dexie, no browser APIs, no Node APIs. Safe to
+ * import from the Vite client build and from the Node server (via tsx)
+ * unchanged. Dexie-coupled read/write (`readAppData`/`restoreBackup` in the
+ * old `db/backup.ts`) live in `server/repo.ts` now; the browser-only
+ * download trigger lives in `lib/download.ts`.
+ */
 
 export function buildBackup(data: AppData, exportedAt = new Date().toISOString()): BackupFile {
-  const { id: _id, lastBackupAt: _l, createdAt: _c, ...settings } = data.settings;
+  const { lastBackupAt: _l, createdAt: _c, ...settings } = data.settings;
   return {
     app: BACKUP_APP_ID,
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -189,40 +196,4 @@ export function parseBackupText(text: string): BackupResult {
     return { ok: false, errors: ['That file is not valid JSON.'] };
   }
   return validateBackup(raw);
-}
-
-/** Replace everything with the (already validated) backup in one atomic transaction. */
-export async function restoreBackup(backup: BackupFile, db: WeeklyDB = defaultDb): Promise<void> {
-  await db.transaction('rw', db.tables, async () => {
-    await Promise.all(db.tables.map((t) => t.clear()));
-    await db.settings.put({ id: 'main', ...backup.settings, createdAt: new Date().toISOString() });
-    await db.budgetChanges.bulkPut(backup.budgetChanges);
-    await db.categories.bulkPut(backup.categories);
-    await db.templates.bulkPut(backup.templates);
-    await db.expenses.bulkPut(backup.expenses);
-  });
-}
-
-export async function readAppData(db: WeeklyDB = defaultDb): Promise<AppData | null> {
-  const settings = await db.settings.get('main');
-  if (!settings) return null;
-  const [budgetChanges, categories, templates, expenses] = await Promise.all([
-    db.budgetChanges.toArray(),
-    db.categories.toArray(),
-    db.templates.toArray(),
-    db.expenses.toArray(),
-  ]);
-  return { settings, budgetChanges, categories, templates, expenses };
-}
-
-export function downloadFile(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

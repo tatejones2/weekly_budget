@@ -1,24 +1,28 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './AuthProvider';
 import { DataProvider, useDataState } from './DataProvider';
 import { ToastProvider } from './Toasts';
 import { AddExpenseProvider } from './AddExpenseProvider';
 import { Shell } from './Shell';
+import { AuthPage } from '../features/auth/AuthPage';
 import { Onboarding } from '../features/onboarding/Onboarding';
 import { OverviewPage } from '../features/budget/OverviewPage';
 import { TransactionsPage } from '../features/expenses/TransactionsPage';
 import { InsightsPage } from '../features/insights/InsightsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 
-function Gate() {
+function Splash() {
+  return (
+    <div className="splash" role="status" aria-live="polite">
+      <span className="splash__mark" aria-hidden />
+      Loading your budget…
+    </div>
+  );
+}
+
+function DataGate() {
   const state = useDataState();
-  if (state.status === 'loading') {
-    return (
-      <div className="splash" role="status" aria-live="polite">
-        <span className="splash__mark" aria-hidden />
-        Loading your budget…
-      </div>
-    );
-  }
+  if (state.status === 'loading') return <Splash />;
   if (state.status === 'empty') return <Onboarding />;
   return (
     <AddExpenseProvider>
@@ -35,13 +39,24 @@ function Gate() {
   );
 }
 
+function AuthGate() {
+  const { state } = useAuth();
+  if (state.status === 'checking') return <Splash />;
+  if (state.status === 'anonymous') return <AuthPage />;
+  return (
+    <DataProvider>
+      <DataGate />
+    </DataProvider>
+  );
+}
+
 export function App() {
   return (
     <HashRouter>
       <ToastProvider>
-        <DataProvider>
-          <Gate />
-        </DataProvider>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
       </ToastProvider>
     </HashRouter>
   );

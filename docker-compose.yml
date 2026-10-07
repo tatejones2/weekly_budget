@@ -1,0 +1,19 @@
+# Local development only — NOT used in production (see docker-compose.production.yml).
+# A disposable Postgres for `npm run db:migrate` / `npm test` / `npm run dev`.
+# Port 5434 (digital_cookbook's own dev Postgres already uses 5433).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: weekly_budget_dev_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: weekly
+      POSTGRES_PASSWORD: weekly_dev_password
+      POSTGRES_DB: weekly
+    ports:
+      - '5434:5432'
+    volumes:
+      - weekly_dev_db:/var/lib/postgresql/data
+
+volumes:
+  weekly_dev_db:

@@ -6,7 +6,7 @@ import { useExpenseActions } from '../../app/AddExpenseProvider';
 import { DateRangeFilter } from '../../components/DateRangeFilter';
 import { EmptyState } from '../../components/EmptyState';
 import { ExpenseRow } from '../../components/ExpenseRow';
-import { downloadFile } from '../../db/backup';
+import { downloadFile } from '../../lib/download';
 import { expensesToCsv } from '../../db/csv';
 import { formatCents } from '../../lib/money';
 import { formatWeekRange, isValidISODate, weekEndOf, weekStartOf, yearOf } from '../../lib/dates';

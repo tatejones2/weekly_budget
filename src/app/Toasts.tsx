@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
-type Toast = { id: number; message: string; tone: 'ok' | 'error'; action?: { label: string; run: () => void } };
+type Toast = { id: number; message: string; tone: 'ok' | 'error'; action?: { label: string; run: () => void | Promise<void> } };
 type ToastApi = {
   show: (message: string, opts?: { tone?: 'ok' | 'error'; action?: Toast['action']; duration?: number }) => void;
 };

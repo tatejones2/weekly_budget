@@ -1,30 +1,63 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/db';
+import { request } from '../api/client';
+import { onDataChanged } from './dataBus';
 import type { AppData } from '../db/types';
 import { msUntilMidnight, todayInZone } from '../lib/dates';
 
 type DataState =
   | { status: 'loading' }
-  | { status: 'empty' } // database open, onboarding not done
+  | { status: 'empty' } // signed in, onboarding not done yet
   | { status: 'ready'; data: AppData };
 
 const DataContext = createContext<DataState>({ status: 'loading' });
 
-/** Loads the whole (small, single-user) dataset reactively; any write re-renders consumers. */
+type RawAppData = {
+  settings: AppData['settings'] | null;
+  budgetChanges: AppData['budgetChanges'];
+  categories: AppData['categories'];
+  templates: AppData['templates'];
+  expenses: AppData['expenses'];
+};
+
+/**
+ * Loads the whole (small, single-user) dataset from `GET /api/data` and
+ * refetches whenever any write happens anywhere in the app (see `dataBus.ts`)
+ * — the server-backed equivalent of Dexie's live-query reactivity. Every
+ * screen that calls `useData()` keeps working unchanged.
+ */
 export function DataProvider({ children }: { children: ReactNode }) {
-  const settingsRows = useLiveQuery(() => db.settings.toArray(), []);
-  const budgetChanges = useLiveQuery(() => db.budgetChanges.toArray(), []);
-  const categories = useLiveQuery(() => db.categories.orderBy('sortOrder').toArray(), []);
-  const templates = useLiveQuery(() => db.templates.toArray(), []);
-  const expenses = useLiveQuery(() => db.expenses.toArray(), []);
+  const [raw, setRaw] = useState<RawAppData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      request<RawAppData>('/api/data')
+        .then((data) => {
+          if (!cancelled) setRaw(data);
+        })
+        .catch(() => {
+          // A 401 here means the session ended between render and fetch (e.g.
+          // signing out while a refetch was in flight); AuthProvider's own
+          // onUnauthorized handler already swaps the whole app back to the
+          // login screen, unmounting this provider — nothing more to do here.
+        });
+    };
+    load();
+    const unsubscribe = onDataChanged(load);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   const state = useMemo<DataState>(() => {
-    if (!settingsRows || !budgetChanges || !categories || !templates || !expenses) return { status: 'loading' };
-    const settings = settingsRows[0];
-    if (!settings) return { status: 'empty' };
-    return { status: 'ready', data: { settings, budgetChanges, categories, templates, expenses } };
-  }, [settingsRows, budgetChanges, categories, templates, expenses]);
+    if (!raw) return { status: 'loading' };
+    if (!raw.settings) return { status: 'empty' };
+    return {
+      status: 'ready',
+      data: { settings: raw.settings, budgetChanges: raw.budgetChanges, categories: raw.categories, templates: raw.templates, expenses: raw.expenses },
+    };
+  }, [raw]);
 
   return <DataContext.Provider value={state}>{children}</DataContext.Provider>;
 }

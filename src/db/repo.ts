@@ -1,77 +1,44 @@
-import { db as defaultDb, type WeeklyDB } from './db';
-import { STARTER_CATEGORIES } from './defaults';
-import type {
-  BudgetChange,
-  BudgetSettings,
-  Category,
-  Expense,
-  PurchaseTemplate,
-  StoredSettings,
-} from './types';
-import { newId } from '../lib/id';
-import { cleanText, normalizeName, MAX_NOTE } from '../lib/validation';
-import { weekStartOf } from '../lib/dates';
+import { request, ApiError } from '../api/client';
+import { notifyDataChanged } from '../app/dataBus';
+import type { BackupFile, BudgetChange, Category, Expense, PurchaseTemplate } from './types';
 
 /**
- * Every write goes through here so views (which use Dexie live queries) update
- * automatically. Functions take an optional db handle to make tests hermetic.
+ * API-backed replacement for the old Dexie gateway. Same exported function
+ * names/signatures as before (minus the test-only `db` param, since there's
+ * no local handle to inject anymore — see `server/repo.test.ts` for the
+ * equivalent server-side behavior tests) — every one of the ~10 feature
+ * files that calls these needed zero changes. Every successful write calls
+ * `notifyDataChanged()`, which is what makes every screen refresh after any
+ * edit, the same way Dexie's live queries did.
  */
 
-const nowIso = () => new Date().toISOString();
+// ---------- settings / onboarding ----------
 
-// ---------- onboarding / settings ----------
-
-export async function completeOnboarding(
-  input: { baseAllowanceCents: number; firstWeekStart: string; openingCarryoverCents: number; timeZone: string },
-  db: WeeklyDB = defaultDb,
-) {
-  const firstWeekStart = weekStartOf(input.firstWeekStart);
-  await db.transaction('rw', [db.settings, db.budgetChanges, db.categories], async () => {
-    await db.settings.put({
-      id: 'main',
-      firstWeekStart,
-      openingCarryoverCents: input.openingCarryoverCents,
-      timeZone: input.timeZone,
-      currency: 'USD',
-      createdAt: nowIso(),
-    });
-    await db.budgetChanges.put({ id: newId(), effectiveWeekStart: firstWeekStart, baseAllowanceCents: input.baseAllowanceCents });
-    if ((await db.categories.count()) === 0) await db.categories.bulkPut(STARTER_CATEGORIES);
-  });
-  try {
-    await navigator.storage?.persist?.(); // ask the browser not to evict our data
-  } catch {
-    /* best effort */
-  }
+export async function completeOnboarding(input: { baseAllowanceCents: number; firstWeekStart: string; openingCarryoverCents: number; timeZone: string }) {
+  await request('/api/onboarding', { method: 'POST', body: input });
+  notifyDataChanged();
 }
 
-export async function updateSettings(patch: Partial<Omit<StoredSettings, 'id'>>, db: WeeklyDB = defaultDb) {
-  await db.settings.update('main', patch);
+export async function updateSettings(patch: { timeZone?: string; lastBackupAt?: string }) {
+  await request('/api/settings', { method: 'PATCH', body: patch });
+  notifyDataChanged();
 }
 
-/** Change the tracking start / opening balance. All later balances are derived, so they simply recompute. */
-export async function updateStartAndOpening(
-  input: { firstWeekStart: string; openingCarryoverCents: number },
-  db: WeeklyDB = defaultDb,
-) {
-  await db.settings.update('main', {
-    firstWeekStart: weekStartOf(input.firstWeekStart),
-    openingCarryoverCents: input.openingCarryoverCents,
-  });
+export async function updateStartAndOpening(input: { firstWeekStart: string; openingCarryoverCents: number }) {
+  await request('/api/settings/start', { method: 'PUT', body: input });
+  notifyDataChanged();
 }
 
-/** Set the base allowance from `effectiveWeekStart` onward (replacing any change already on that Monday). */
-export async function setBudgetChange(effectiveWeekStart: string, baseAllowanceCents: number, db: WeeklyDB = defaultDb) {
-  await db.transaction('rw', db.budgetChanges, async () => {
-    const same = await db.budgetChanges.where('effectiveWeekStart').equals(effectiveWeekStart).toArray();
-    if (same.length) await db.budgetChanges.bulkDelete(same.map((c) => c.id));
-    await db.budgetChanges.put({ id: newId(), effectiveWeekStart, baseAllowanceCents });
-  });
+// ---------- budget changes ----------
+
+export async function setBudgetChange(effectiveWeekStart: string, baseAllowanceCents: number) {
+  await request<{ budgetChange: BudgetChange }>('/api/budget-changes', { method: 'PUT', body: { effectiveWeekStart, baseAllowanceCents } });
+  notifyDataChanged();
 }
 
-export async function deleteBudgetChange(id: string, db: WeeklyDB = defaultDb) {
-  if ((await db.budgetChanges.count()) <= 1) return; // always keep at least one
-  await db.budgetChanges.delete(id);
+export async function deleteBudgetChange(id: string) {
+  await request(`/api/budget-changes/${id}`, { method: 'DELETE' });
+  notifyDataChanged();
 }
 
 // ---------- expenses ----------
@@ -86,121 +53,63 @@ export type ExpenseWrite = {
   templateId?: string;
 };
 
-/** Reuse the user's existing spelling if this merchant (case-insensitively) is already known. */
-async function canonicalMerchant(name: string, db: WeeklyDB): Promise<string> {
-  const cleaned = cleanText(name);
-  const key = normalizeName(cleaned);
-  const match = await db.expenses.filter((e) => normalizeName(e.merchantName) === key).first();
-  return match?.merchantName ?? cleaned;
-}
-
-export async function addExpense(input: ExpenseWrite, db: WeeklyDB = defaultDb): Promise<Expense> {
-  const ts = nowIso();
-  const expense: Expense = {
-    id: newId(),
-    merchantName: await canonicalMerchant(input.merchantName, db),
-    amountCents: input.amountCents,
-    type: input.type,
-    categoryId: input.categoryId,
-    date: input.date,
-    createdAt: ts,
-    updatedAt: ts,
-  };
-  const note = input.note ? cleanText(input.note, MAX_NOTE) : '';
-  if (note) expense.note = note;
-  if (input.templateId) expense.templateId = input.templateId;
-
-  await db.transaction('rw', [db.expenses, db.templates], async () => {
-    await db.expenses.add(expense);
-    if (input.templateId) {
-      const t = await db.templates.get(input.templateId);
-      if (t) await db.templates.update(t.id, { usageCount: t.usageCount + 1, lastUsedAt: ts });
-    }
-  });
+export async function addExpense(input: ExpenseWrite): Promise<Expense> {
+  const { expense } = await request<{ expense: Expense }>('/api/expenses', { method: 'POST', body: input });
+  notifyDataChanged();
   return expense;
 }
 
-export async function updateExpense(id: string, input: ExpenseWrite, db: WeeklyDB = defaultDb): Promise<void> {
-  const existing = await db.expenses.get(id);
-  if (!existing) return;
-  const next: Expense = {
-    ...existing,
-    merchantName: await canonicalMerchant(input.merchantName, db),
-    amountCents: input.amountCents,
-    type: input.type,
-    categoryId: input.categoryId,
-    date: input.date,
-    updatedAt: nowIso(),
-  };
-  const note = input.note ? cleanText(input.note, MAX_NOTE) : '';
-  if (note) next.note = note;
-  else delete next.note;
-  // Editing a purchase never touches the template it came from.
-  await db.expenses.put(next);
+export async function updateExpense(id: string, input: ExpenseWrite): Promise<void> {
+  await request(`/api/expenses/${id}`, { method: 'PATCH', body: input });
+  notifyDataChanged();
 }
 
-export async function deleteExpense(id: string, db: WeeklyDB = defaultDb): Promise<Expense | undefined> {
-  const existing = await db.expenses.get(id);
-  if (existing) await db.expenses.delete(id);
-  return existing;
+export async function deleteExpense(id: string): Promise<Expense | undefined> {
+  const { expense } = await request<{ expense: Expense | null }>(`/api/expenses/${id}`, { method: 'DELETE' });
+  notifyDataChanged();
+  return expense ?? undefined;
 }
 
 /** Put back an expense exactly as it was (used by Undo). */
-export async function restoreExpense(expense: Expense, db: WeeklyDB = defaultDb) {
-  await db.expenses.put(expense);
+export async function restoreExpense(expense: Expense): Promise<void> {
+  await request(`/api/expenses/${expense.id}/restore`, { method: 'POST', body: expense });
+  notifyDataChanged();
 }
 
-/** Rename a merchant everywhere. If `to` matches another merchant, the two merge. Returns rows changed. */
-export async function renameMerchant(from: string, to: string, db: WeeklyDB = defaultDb): Promise<number> {
-  const fromKey = normalizeName(from);
-  const target = cleanText(to);
-  if (!target) return 0;
-  const targetKey = normalizeName(target);
-  return db.transaction('rw', [db.expenses, db.templates], async () => {
-    // If merging into an existing merchant, adopt that merchant's spelling.
-    const existing = await db.expenses.filter((e) => normalizeName(e.merchantName) === targetKey && targetKey !== fromKey).first();
-    const finalName = existing?.merchantName ?? target;
-    const rows = await db.expenses.filter((e) => normalizeName(e.merchantName) === fromKey).toArray();
-    const ts = nowIso();
-    await db.expenses.bulkPut(rows.map((e) => ({ ...e, merchantName: finalName, updatedAt: ts })));
-    const tpls = await db.templates.filter((t) => normalizeName(t.merchantName) === fromKey).toArray();
-    await db.templates.bulkPut(tpls.map((t) => ({ ...t, merchantName: finalName })));
-    return rows.length + tpls.length;
-  });
+export async function renameMerchant(from: string, to: string): Promise<number> {
+  const { changed } = await request<{ changed: number }>('/api/merchants/rename', { method: 'PATCH', body: { from, to } });
+  notifyDataChanged();
+  return changed;
 }
 
 // ---------- categories ----------
 
-export async function addCategory(name: string, db: WeeklyDB = defaultDb): Promise<Category | null> {
-  const cleaned = cleanText(name, 40);
-  if (!cleaned) return null;
-  const all = await db.categories.toArray();
-  if (all.some((c) => normalizeName(c.name) === normalizeName(cleaned))) return null;
-  const cat: Category = { id: newId(), name: cleaned, sortOrder: Math.max(-1, ...all.map((c) => c.sortOrder)) + 1 };
-  await db.categories.add(cat);
-  return cat;
+export async function addCategory(name: string): Promise<Category | null> {
+  try {
+    const { category } = await request<{ category: Category }>('/api/categories', { method: 'POST', body: { name } });
+    notifyDataChanged();
+    return category;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return null;
+    throw error;
+  }
 }
 
-export async function renameCategory(id: string, name: string, db: WeeklyDB = defaultDb): Promise<boolean> {
-  const cleaned = cleanText(name, 40);
-  if (!cleaned) return false;
-  const all = await db.categories.toArray();
-  if (all.some((c) => c.id !== id && normalizeName(c.name) === normalizeName(cleaned))) return false;
-  await db.categories.update(id, { name: cleaned });
-  return true;
+export async function renameCategory(id: string, name: string): Promise<boolean> {
+  try {
+    await request(`/api/categories/${id}`, { method: 'PATCH', body: { name } });
+    notifyDataChanged();
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return false;
+    throw error;
+  }
 }
 
 /** Delete a category, moving its transactions and shortcuts to `reassignToId`. */
-export async function deleteCategory(id: string, reassignToId: string, db: WeeklyDB = defaultDb) {
-  if (id === reassignToId) return;
-  await db.transaction('rw', [db.categories, db.expenses, db.templates], async () => {
-    const exps = await db.expenses.where('categoryId').equals(id).toArray();
-    const ts = nowIso();
-    await db.expenses.bulkPut(exps.map((e) => ({ ...e, categoryId: reassignToId, updatedAt: ts })));
-    const tpls = await db.templates.filter((t) => t.categoryId === id).toArray();
-    await db.templates.bulkPut(tpls.map((t) => ({ ...t, categoryId: reassignToId })));
-    await db.categories.delete(id);
-  });
+export async function deleteCategory(id: string, reassignToId: string): Promise<void> {
+  await request(`/api/categories/${id}`, { method: 'DELETE', body: { reassignToId } });
+  notifyDataChanged();
 }
 
 // ---------- templates ----------
@@ -213,43 +122,31 @@ export type TemplateWrite = {
   categoryId: string;
 };
 
-export async function addTemplate(input: TemplateWrite, db: WeeklyDB = defaultDb): Promise<PurchaseTemplate> {
-  const t: PurchaseTemplate = {
-    id: newId(),
-    merchantName: await canonicalMerchant(input.merchantName, db),
-    label: cleanText(input.label) || cleanText(input.merchantName),
-    kind: input.kind,
-    amountCents: input.kind === 'fixed' ? input.amountCents : null,
-    categoryId: input.categoryId,
-    usageCount: 0,
-  };
-  await db.templates.add(t);
-  return t;
+export async function addTemplate(input: TemplateWrite): Promise<PurchaseTemplate> {
+  const { template } = await request<{ template: PurchaseTemplate }>('/api/templates', { method: 'POST', body: input });
+  notifyDataChanged();
+  return template;
 }
 
-export async function updateTemplate(id: string, input: TemplateWrite, db: WeeklyDB = defaultDb) {
-  await db.templates.update(id, {
-    merchantName: cleanText(input.merchantName),
-    label: cleanText(input.label) || cleanText(input.merchantName),
-    kind: input.kind,
-    amountCents: input.kind === 'fixed' ? input.amountCents : null,
-    categoryId: input.categoryId,
-  });
+export async function updateTemplate(id: string, input: TemplateWrite): Promise<void> {
+  await request(`/api/templates/${id}`, { method: 'PATCH', body: input });
+  notifyDataChanged();
 }
 
-export async function deleteTemplate(id: string, db: WeeklyDB = defaultDb) {
-  await db.templates.delete(id);
-  // Past transactions keep their data; only the back-reference is dropped.
-  const linked = await db.expenses.filter((e) => e.templateId === id).toArray();
-  if (linked.length) await db.expenses.bulkPut(linked.map((e) => { const { templateId: _t, ...rest } = e; return rest; }));
+export async function deleteTemplate(id: string): Promise<void> {
+  await request(`/api/templates/${id}`, { method: 'DELETE' });
+  notifyDataChanged();
 }
 
-// ---------- reset ----------
+// ---------- backup / reset ----------
 
-export async function clearAllData(db: WeeklyDB = defaultDb) {
-  await db.transaction('rw', db.tables, async () => {
-    await Promise.all(db.tables.map((t) => t.clear()));
-  });
+/** Server re-validates before replacing anything — see server/repo.ts's `restoreBackupData`. */
+export async function restoreBackup(backup: BackupFile): Promise<void> {
+  await request('/api/backup/restore', { method: 'POST', body: backup });
+  notifyDataChanged();
 }
 
-export type { BudgetChange, BudgetSettings };
+export async function clearAllData(): Promise<void> {
+  await request('/api/data', { method: 'DELETE' });
+  notifyDataChanged();
+}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '../../app/AuthProvider';
 import { useData, useToday } from '../../app/DataProvider';
 import { useToast } from '../../app/Toasts';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -49,7 +50,33 @@ export function SettingsPage() {
       <MerchantsSection />
       <DataSection />
       <AppearanceSection />
+      <AccountSection />
     </div>
+  );
+}
+
+function AccountSection() {
+  const { state, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+  const email = state.status === 'authenticated' ? state.user.email : '';
+
+  return (
+    <Section id="account" title="Account">
+      <p className="hint">Signed in as {email}.</p>
+      <div>
+        <button
+          type="button"
+          className="btn"
+          disabled={signingOut}
+          onClick={async () => {
+            setSigningOut(true);
+            await logout();
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    </Section>
   );
 }
 
@@ -103,7 +130,20 @@ function BudgetSection() {
             <span>From <strong>{formatDateLong(c.effectiveWeekStart)}</strong></span>
             <span className="num">{formatCents(c.baseAllowanceCents)}/week</span>
             {history.length > 1 && (
-              <button type="button" className="link-btn" onClick={() => void deleteBudgetChange(c.id)} aria-label={`Remove budget change from ${c.effectiveWeekStart}`}>Remove</button>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={async () => {
+                  try {
+                    await deleteBudgetChange(c.id);
+                  } catch {
+                    toast.show('Could not remove that budget entry.', { tone: 'error' });
+                  }
+                }}
+                aria-label={`Remove budget change from ${c.effectiveWeekStart}`}
+              >
+                Remove
+              </button>
             )}
           </li>
         ))}

@@ -61,7 +61,16 @@ export function AddExpenseProvider({ children }: { children: ReactNode }) {
           const removed = await deleteExpense(target.id);
           if (removed) {
             toast.show(`Deleted ${removed.merchantName} ${formatCents(removed.amountCents)}`, {
-              action: { label: 'Undo', run: () => void restoreExpense(removed) },
+              action: {
+                label: 'Undo',
+                run: async () => {
+                  try {
+                    await restoreExpense(removed);
+                  } catch {
+                    toast.show('Could not undo the delete. The transaction is still removed.', { tone: 'error' });
+                  }
+                },
+              },
             });
           }
         }}

@@ -1,0 +1,30 @@
+# weekly_budget — production. Runs alongside digital_cookbook's mise-cookbook
+# on the same droplet, sharing the Postgres container (separate database,
+# separate least-privilege role — see deployment/bootstrap-droplet.sh) and
+# the Caddy reverse proxy (see ~/infrastructure/Caddyfile).
+#
+# The image is built on GitHub Actions and pushed to GHCR — this file only
+# pulls and runs it, so deploys never compete with the droplet's other
+# containers for CPU/memory during a build.
+services:
+  weekly:
+    image: ghcr.io/tatejones2/weekly_budget:latest
+    container_name: weekly-budget
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    networks:
+      - web
+      - internal
+    mem_limit: 256m
+    cpus: 0.5
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  web:
+    name: web
+    external: true
+  internal:
+    name: internal
+    external: true
